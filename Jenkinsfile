@@ -2,12 +2,14 @@ pipeline {
     agent any
 
     tools {
-        maven 'maven'
+        maven 'maven' // Name from Global Tool Configuration
     }
 
     environment {
         DOCKER_IMAGE_NAME = "sarusparks/logistics_be"
+        KUBECONFIG_PATH = "/tmp/kubeconfig"
         HELM_RELEASE_NAME = "logistics-backend"
+        HELM_CHART_DIR = "Helm/backend"
         AWS_REGION = "us-east-2"
     }
 
@@ -36,17 +38,23 @@ pipeline {
             }
         }
 
-        stage('Checkout Code') {
+        stage('Checkout Code from GitHub') {
             steps {
                 git branch: 'main',
                     url: 'https://github.com/sidhu8431/logistics-backend.git'
             }
         }
 
-        stage('Build with Maven') {
+        stage('Build Application') {
             steps {
                 dir('logistics-backend') {
-                    sh 'mvn clean install -DskipTests'
+                    script {
+                        if (fileExists('pom.xml')) {
+                            sh 'mvn clean install -DskipTests'
+                        } else {
+                            error "pom.xml not found in the logistics-backend directory!"
+                        }
+                    }
                 }
             }
         }
@@ -54,7 +62,7 @@ pipeline {
         stage('Docker Build and Push') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-access', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    dir('Docker/backend') {
+                    dir('Docker/backend/') {
                         sh '''
                             echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
                             docker build -t ${DOCKER_IMAGE_NAME}:v1 .
@@ -65,10 +73,11 @@ pipeline {
             }
         }
 
-        stage('Configure kubeconfig') {
+        stage('Configure kubeconfig for EKS') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'sidhu_aws_access']]) {
                     sh '''
+                        echo "Generating kubeconfig for EKS..."
                         aws eks update-kubeconfig --name logistics-cluster --region ${AWS_REGION}
                         kubectl get nodes
                     '''
@@ -78,22 +87,19 @@ pipeline {
 
         stage('Fix Helm Namespace Labels') {
             steps {
-                dir('Helm/backend') {
-                    sh '''
-                        kubectl label namespace logistics app.kubernetes.io/managed-by=Helm --overwrite
-                        kubectl annotate namespace logistics \
-                          meta.helm.sh/release-name=${HELM_RELEASE_NAME} \
-                          meta.helm.sh/release-namespace=logistics --overwrite
-                    '''
-                }
+                sh '''
+                    echo "Adding Helm metadata to namespace if missing..."
+                    helm install ${HELM_RELEASE_NAME} Helm/backend/ --namespace logistics --create-namespace
+                '''
             }
         }
 
         stage('Helm Deploy') {
             steps {
-                dir('Helm/backend') {
+                dir('Helm/backend/') {
                     sh '''
-                        helm upgrade --install ${HELM_RELEASE_NAME} . \
+                        echo "Deploying with Helm..."
+                        helm upgrade --install ${HELM_RELEASE_NAME} ${HELM_CHART_DIR} \
                           --set image.repository=${DOCKER_IMAGE_NAME} \
                           --set image.tag=v1 \
                           --set service.type=LoadBalancer \
