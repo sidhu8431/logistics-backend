@@ -47,7 +47,7 @@ pipeline {
 
         stage('Build Application') {
             steps {
-                dir('logistics-backend') {
+              
                     script {
                         if (fileExists('pom.xml')) {
                             sh 'mvn clean install -DskipTests'
@@ -55,7 +55,7 @@ pipeline {
                             error "pom.xml not found in the logistics-backend directory!"
                         }
                     }
-                }
+                
             }
         }
 
