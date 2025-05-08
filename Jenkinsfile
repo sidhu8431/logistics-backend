@@ -61,7 +61,7 @@ pipeline {
             steps {
                 script {
                     if (fileExists('pom.xml')) {
-                        sh 'mvn clean install -DskipTests'
+                        sh 'mvn clean install -Dmaven.test.skip=true'
                     } else {
                         error "pom.xml not found!"
                     }
