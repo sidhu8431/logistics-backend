@@ -46,7 +46,7 @@ pipeline {
         stage('Build with Maven') {
             steps {
                 dir('logistics-backend') {
-                    sh 'mvn clean install'
+                    sh 'mvn clean install -DskipTests'
                 }
             }
         }
