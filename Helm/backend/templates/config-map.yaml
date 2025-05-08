@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend
+  namespace: logistics
+data:
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://logistics-postgres.c52g0ciigsal.us-east-2.rds.amazonaws.com:5432/mydb"
